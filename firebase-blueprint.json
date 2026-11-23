@@ -1,0 +1,370 @@
+{
+  "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized faculty coordinator or campus lab administrator.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "department": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "department", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public campus directory profile without PII.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "department": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "role": {
+          "type": "string",
+          "enum": ["student", "faculty"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "displayName", "department", "role", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated user PII such as campus email and academic ID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "campusId": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "updatedAt"]
+    },
+    "Equipment": {
+      "title": "Equipment",
+      "description": "Specialized laboratory instrument, dev kit, or workstation.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "department": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "category": {
+          "type": "string",
+          "enum": ["Electronics & RF", "AI & Compute", "Robotics & FPGA", "Fabrication & Photonics"]
+        },
+        "labRoom": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "building": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "status": {
+          "type": "string",
+          "enum": ["available", "in_use", "maintenance"]
+        },
+        "requiresFacultyApproval": {
+          "type": "boolean"
+        },
+        "specs": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 400
+        },
+        "capabilities": {
+          "type": "array",
+          "description": "Up to 10 technical capability tags."
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 260
+        },
+        "utilizationPct": {
+          "type": "number"
+        },
+        "maxHoursPerSlot": {
+          "type": "number"
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "department",
+        "category",
+        "labRoom",
+        "building",
+        "status",
+        "requiresFacultyApproval",
+        "specs",
+        "capabilities",
+        "imageUrl",
+        "utilizationPct",
+        "maxHoursPerSlot",
+        "isActive",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Student project-based equipment access request and time slot allocation.",
+      "type": "object",
+      "properties": {
+        "requesterUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "requesterName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "department": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "equipmentId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "equipmentName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "projectTitle": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 140
+        },
+        "projectSummary": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 600
+        },
+        "courseOrLabCode": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "deadlineIso": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "startIso": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "endIso": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "conflict", "rejected", "cancelled", "completed"]
+        },
+        "requiresFacultyApproval": {
+          "type": "boolean"
+        },
+        "facultyNotes": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "aiResolutionNote": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "requesterUid",
+        "requesterName",
+        "department",
+        "equipmentId",
+        "equipmentName",
+        "projectTitle",
+        "projectSummary",
+        "courseOrLabCode",
+        "deadlineIso",
+        "startIso",
+        "endIso",
+        "status",
+        "requiresFacultyApproval",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SlotBlock": {
+      "title": "SlotBlock",
+      "description": "Public, PII-free schedule occupancy block for equipment availability and conflict detection.",
+      "type": "object",
+      "properties": {
+        "equipmentId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "equipmentName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "bookingId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "startIso": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "endIso": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "status": {
+          "type": "string",
+          "enum": ["reserved", "pending", "conflict"]
+        },
+        "projectLabel": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "isPublicSlot": {
+          "type": "boolean"
+        },
+        "createdByUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "equipmentId",
+        "equipmentName",
+        "bookingId",
+        "startIso",
+        "endIso",
+        "status",
+        "projectLabel",
+        "isPublicSlot",
+        "createdByUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Explicitly authorized faculty coordinators and lab admins."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Public campus directory profile without PII."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Owner-isolated PII record (email, campusId)."
+    },
+    "/equipment/{equipmentId}": {
+      "schema": { "$ref": "#/entities/Equipment" },
+      "description": "Campus laboratory equipment inventory."
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Student project-based booking and faculty approval requests."
+    },
+    "/slotBlocks/{blockId}": {
+      "schema": { "$ref": "#/entities/SlotBlock" },
+      "description": "Public PII-free schedule occupancy blocks for conflict detection."
+    }
+  }
+}

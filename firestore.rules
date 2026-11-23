@@ -1,0 +1,288 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isVerified() && (
+        request.auth.token.email == 'tejasma2007@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['uid', 'department', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'department', 'createdAt']) &&
+        isValidId(data.uid) &&
+        data.department is string && data.department.size() >= 2 && data.department.size() <= 80 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'department', 'role', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'department', 'role', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        data.department is string && data.department.size() >= 2 && data.department.size() <= 80 &&
+        data.role in ['student', 'faculty'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAll(['uid', 'email', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'campusId', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+        (!('campusId' in data) || (data.campusId is string && data.campusId.size() <= 40)) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidEquipment(data) {
+      return data.keys().hasAll([
+          'id', 'name', 'department', 'category', 'labRoom', 'building',
+          'status', 'requiresFacultyApproval', 'specs', 'capabilities',
+          'imageUrl', 'utilizationPct', 'maxHoursPerSlot', 'isActive',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'name', 'department', 'category', 'labRoom', 'building',
+          'status', 'requiresFacultyApproval', 'specs', 'capabilities',
+          'imageUrl', 'utilizationPct', 'maxHoursPerSlot', 'isActive',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+        data.department is string && data.department.size() >= 2 && data.department.size() <= 80 &&
+        data.category in ['Electronics & RF', 'AI & Compute', 'Robotics & FPGA', 'Fabrication & Photonics'] &&
+        data.labRoom is string && data.labRoom.size() >= 2 && data.labRoom.size() <= 80 &&
+        data.building is string && data.building.size() >= 2 && data.building.size() <= 80 &&
+        data.status in ['available', 'in_use', 'maintenance'] &&
+        data.requiresFacultyApproval is bool &&
+        data.specs is string && data.specs.size() >= 5 && data.specs.size() <= 400 &&
+        data.capabilities is list && data.capabilities.size() >= 1 && data.capabilities.size() <= 10 &&
+        data.capabilities[0] is string && data.capabilities[0].size() <= 60 &&
+        data.imageUrl is string && data.imageUrl.size() >= 1 && data.imageUrl.size() <= 260 &&
+        data.utilizationPct is number && data.utilizationPct >= 0 && data.utilizationPct <= 100 &&
+        data.maxHoursPerSlot is number && data.maxHoursPerSlot >= 1 && data.maxHoursPerSlot <= 24 &&
+        data.isActive is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidBooking(data) {
+      return data.keys().hasAll([
+          'requesterUid', 'requesterName', 'department', 'equipmentId', 'equipmentName',
+          'projectTitle', 'projectSummary', 'courseOrLabCode', 'deadlineIso',
+          'startIso', 'endIso', 'status', 'requiresFacultyApproval',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'requesterUid', 'requesterName', 'department', 'equipmentId', 'equipmentName',
+          'projectTitle', 'projectSummary', 'courseOrLabCode', 'deadlineIso',
+          'startIso', 'endIso', 'status', 'requiresFacultyApproval',
+          'facultyNotes', 'aiResolutionNote', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.requesterUid) &&
+        data.requesterName is string && data.requesterName.size() >= 1 && data.requesterName.size() <= 100 &&
+        data.department is string && data.department.size() >= 2 && data.department.size() <= 80 &&
+        isValidId(data.equipmentId) &&
+        data.equipmentName is string && data.equipmentName.size() >= 2 && data.equipmentName.size() <= 120 &&
+        data.projectTitle is string && data.projectTitle.size() >= 3 && data.projectTitle.size() <= 140 &&
+        data.projectSummary is string && data.projectSummary.size() >= 5 && data.projectSummary.size() <= 600 &&
+        data.courseOrLabCode is string && data.courseOrLabCode.size() >= 2 && data.courseOrLabCode.size() <= 40 &&
+        data.deadlineIso is string && data.deadlineIso.size() >= 10 && data.deadlineIso.size() <= 40 &&
+        data.startIso is string && data.startIso.size() >= 10 && data.startIso.size() <= 40 &&
+        data.endIso is string && data.endIso.size() >= 10 && data.endIso.size() <= 40 &&
+        data.status in ['pending', 'approved', 'conflict', 'rejected', 'cancelled', 'completed'] &&
+        data.requiresFacultyApproval is bool &&
+        (!('facultyNotes' in data) || (data.facultyNotes is string && data.facultyNotes.size() <= 400)) &&
+        (!('aiResolutionNote' in data) || (data.aiResolutionNote is string && data.aiResolutionNote.size() <= 500)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSlotBlock(data) {
+      return data.keys().hasAll([
+          'equipmentId', 'equipmentName', 'bookingId', 'startIso', 'endIso',
+          'status', 'projectLabel', 'isPublicSlot', 'createdByUid',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'equipmentId', 'equipmentName', 'bookingId', 'startIso', 'endIso',
+          'status', 'projectLabel', 'isPublicSlot', 'createdByUid',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.equipmentId) &&
+        data.equipmentName is string && data.equipmentName.size() >= 2 && data.equipmentName.size() <= 120 &&
+        isValidId(data.bookingId) &&
+        data.startIso is string && data.startIso.size() >= 10 && data.startIso.size() <= 40 &&
+        data.endIso is string && data.endIso.size() >= 10 && data.endIso.size() <= 40 &&
+        data.status in ['reserved', 'pending', 'conflict'] &&
+        data.projectLabel is string && data.projectLabel.size() >= 2 && data.projectLabel.size() <= 80 &&
+        data.isPublicSlot is bool &&
+        isValidId(data.createdByUid) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    // Admins
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(adminId) && isValidAdmin(incoming()) &&
+        incoming().uid == adminId && incoming().createdAt == request.time;
+      allow update: if isAdmin() && isValidId(adminId) && isValidAdmin(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['department']);
+      allow delete: if isAdmin() && isValidId(adminId);
+    }
+
+    // Public Campus Directory Profile (No PII)
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isVerified() && isValidId(userId) && isOwner(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        (incoming().role == 'student' || isAdmin()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerified() && isValidId(userId) && isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'department', 'role', 'updatedAt'])) ||
+          (isOwner(userId) &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'department', 'updatedAt']))
+        );
+      allow delete: if isAdmin() && isValidId(userId);
+
+      // Isolated PII Subcollection
+      match /private/{docId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(docId) && (isOwner(userId) || isAdmin());
+        allow list: if isAdmin() && isValidId(userId);
+        allow create: if isVerified() && isValidId(userId) && isValidId(docId) && (isOwner(userId) || isAdmin()) &&
+          isValidUserPrivateInfo(incoming()) &&
+          incoming().uid == userId &&
+          incoming().updatedAt == request.time;
+        allow update: if isVerified() && isValidId(userId) && isValidId(docId) && (isOwner(userId) || isAdmin()) &&
+          isValidUserPrivateInfo(incoming()) &&
+          incoming().uid == existing().uid &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['email', 'campusId', 'updatedAt']);
+        allow delete: if isAdmin() && isValidId(userId) && isValidId(docId);
+      }
+    }
+
+    // Campus Laboratory Equipment Catalog (No PII)
+    match /equipment/{equipmentId} {
+      allow get: if isValidId(equipmentId);
+      allow list: if resource.data.isActive == true;
+      allow create: if isAdmin() && isValidId(equipmentId) && isValidEquipment(incoming()) &&
+        incoming().id == equipmentId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(equipmentId) && isValidEquipment(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'department', 'category', 'labRoom', 'building',
+          'status', 'requiresFacultyApproval', 'specs', 'capabilities',
+          'imageUrl', 'utilizationPct', 'maxHoursPerSlot', 'isActive', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(equipmentId);
+    }
+
+    // Project-Based Access Requests & Bookings
+    match /bookings/{bookingId} {
+      allow get: if isSignedIn() && isValidId(bookingId) && (existing().requesterUid == request.auth.uid || isAdmin());
+      allow list: if isAdmin() || (isSignedIn() && resource.data.requesterUid == request.auth.uid);
+      allow create: if isVerified() && isValidId(bookingId) && isValidBooking(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/equipment/$(incoming().equipmentId)) && (
+          isAdmin() ||
+          (incoming().requesterUid == request.auth.uid &&
+            incoming().requiresFacultyApproval == get(/databases/$(database)/documents/equipment/$(incoming().equipmentId)).data.requiresFacultyApproval &&
+            incoming().status in ['pending', 'conflict', 'approved'] &&
+            (incoming().status != 'approved' || incoming().requiresFacultyApproval == false))
+        );
+      allow update: if isVerified() && isValidId(bookingId) && isValidBooking(incoming()) &&
+        incoming().requesterUid == existing().requesterUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'status', 'facultyNotes', 'aiResolutionNote', 'equipmentId', 'equipmentName',
+            'startIso', 'endIso', 'updatedAt'
+          ])) ||
+          (existing().requesterUid == request.auth.uid &&
+            !(existing().status in ['rejected', 'cancelled', 'completed']) &&
+            incoming().status == 'cancelled' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+        );
+      allow delete: if isAdmin() && isValidId(bookingId);
+    }
+
+    // Public Schedule Occupancy Blocks (No PII)
+    match /slotBlocks/{blockId} {
+      allow get: if isValidId(blockId);
+      allow list: if resource.data.isPublicSlot == true;
+      allow create: if isVerified() && isValidId(blockId) && isValidSlotBlock(incoming()) &&
+        incoming().isPublicSlot == true &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        existsAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId)) && (
+          isAdmin() ||
+          incoming().createdByUid == request.auth.uid
+        );
+      allow update: if isVerified() && isValidId(blockId) && isValidSlotBlock(incoming()) &&
+        incoming().createdByUid == existing().createdByUid &&
+        incoming().bookingId == existing().bookingId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'equipmentId', 'equipmentName', 'startIso', 'endIso', 'status', 'projectLabel', 'updatedAt'
+          ])) ||
+          (existing().createdByUid == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+        );
+      allow delete: if isVerified() && isValidId(blockId) && (isAdmin() || existing().createdByUid == request.auth.uid);
+    }
+  }
+}
