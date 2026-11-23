@@ -2,5 +2,7 @@
   "name": "LabLink",
   "description": "GenAI-powered campus laboratory resource-sharing platform for equipment discovery, intelligent slot booking, faculty approvals, and fair conflict resolution.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

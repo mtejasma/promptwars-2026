@@ -32,8 +32,8 @@ export function ApprovalsPanel({
   const facultyQueue = bookings.filter(
     (b) => b.status === 'pending' || b.status === 'conflict'
   );
-  const myRequests = currentUid
-    ? bookings.filter((b) => b.requesterUid === currentUid)
+  const myBookings = currentUid
+    ? bookings.filter((b) => b.requesterUid === currentUid || b.requesterUid === 'demo_user')
     : bookings;
 
   async function handleRunBrief(booking: Booking) {
@@ -67,7 +67,11 @@ export function ApprovalsPanel({
     setBusyId(booking.id);
     setError(null);
     try {
-      const note = notesById[booking.id] || (decision === 'approved' ? 'Approved for scheduled lab window.' : 'Declined due to resource constraints.');
+      const note =
+        notesById[booking.id] ||
+        (decision === 'approved'
+          ? 'Approved for scheduled lab window.'
+          : 'Declined due to resource constraints.');
       if (decision === 'approved') {
         await onApprove(booking, note);
       } else {
@@ -105,7 +109,84 @@ export function ApprovalsPanel({
         </div>
       )}
 
-      {roleMode === 'faculty' ? (
+      {/* Always show My Bookings so newly submitted bookings are immediately visible */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">My Bookings</h2>
+            <p className="text-sm text-slate-600">
+              Your confirmed laboratory slots, project access requests, and scheduling status.
+            </p>
+          </div>
+          <span className="text-xs font-mono tabular-nums text-slate-600 whitespace-nowrap shrink-0">
+            {myBookings.length} bookings
+          </span>
+        </div>
+
+        {myBookings.length === 0 ? (
+          <div className="p-8 text-center text-sm text-slate-500">
+            You have no laboratory bookings yet. Click &ldquo;Try Demo Booking&rdquo; or choose an instrument from Equipment Discovery to reserve a slot.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[760px]">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                  <th className="py-3 px-5">Project & Course</th>
+                  <th className="py-3 px-4">Equipment</th>
+                  <th className="py-3 px-4">Scheduled Window</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-5 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 text-sm">
+                {myBookings.map((bk) => (
+                  <tr key={bk.id} className="hover:bg-slate-50/60">
+                    <td className="py-3.5 px-5">
+                      <p className="font-medium text-slate-900">{bk.projectTitle}</p>
+                      <p className="text-xs text-slate-500">
+                        {bk.courseOrLabCode} · {bk.requesterName} · Due {bk.deadlineIso.slice(0, 10)}
+                      </p>
+                      {(bk.aiResolutionNote || bk.facultyNotes) && (
+                        <p className="text-xs text-slate-600 mt-1 max-w-md">
+                          {bk.aiResolutionNote || bk.facultyNotes}
+                        </p>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-xs text-slate-700 font-medium">
+                      {bk.equipmentName}
+                    </td>
+                    <td className="py-3.5 px-4 text-xs font-mono tabular-nums text-slate-700 whitespace-nowrap">
+                      {bk.startIso.replace('T', ' ')} → {bk.endIso.slice(11, 16)}
+                    </td>
+                    <td className="py-3.5 px-4 text-xs whitespace-nowrap">
+                      {renderStatusLabel(bk.status)}
+                    </td>
+                    <td className="py-3.5 px-5 text-right">
+                      {(bk.requesterUid === currentUid || bk.requesterUid === 'demo_user' || !currentUid) &&
+                      bk.status !== 'cancelled' &&
+                      bk.status !== 'rejected' &&
+                      bk.status !== 'completed' ? (
+                        <button
+                          type="button"
+                          onClick={() => onCancelOwn(bk.id)}
+                          className="px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:text-rose-700 hover:border-rose-200 transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {roleMode === 'faculty' && (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="px-6 py-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -242,85 +323,6 @@ export function ApprovalsPanel({
                   </div>
                 );
               })}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                {currentUid ? 'My Project Access Requests' : 'Sample Student Access Requests'}
-              </h2>
-              <p className="text-sm text-slate-600">
-                Track faculty sign-offs, AI conflict resolution updates, and confirmed laboratory slots.
-              </p>
-            </div>
-            <span className="text-xs font-mono tabular-nums text-slate-600">
-              {myRequests.length} requests
-            </span>
-          </div>
-
-          {myRequests.length === 0 ? (
-            <div className="p-8 text-center text-sm text-slate-500">
-              You have no laboratory bookings yet. Browse Equipment Discovery or use AI Match to book your first bench slot.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[760px]">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
-                    <th className="py-3 px-5">Project & Course</th>
-                    <th className="py-3 px-4">Equipment</th>
-                    <th className="py-3 px-4">Scheduled Window</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-5 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 text-sm">
-                  {myRequests.map((bk) => (
-                    <tr key={bk.id} className="hover:bg-slate-50/60">
-                      <td className="py-3.5 px-5">
-                        <p className="font-medium text-slate-900">{bk.projectTitle}</p>
-                        <p className="text-xs text-slate-500">
-                          {bk.courseOrLabCode} · Due {bk.deadlineIso.slice(0, 10)}
-                        </p>
-                        {(bk.aiResolutionNote || bk.facultyNotes) && (
-                          <p className="text-xs text-slate-600 mt-1 max-w-md">
-                            {bk.aiResolutionNote || bk.facultyNotes}
-                          </p>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-xs text-slate-700 font-medium">
-                        {bk.equipmentName}
-                      </td>
-                      <td className="py-3.5 px-4 text-xs font-mono tabular-nums text-slate-700 whitespace-nowrap">
-                        {bk.startIso.replace('T', ' ')} → {bk.endIso.slice(11, 16)}
-                      </td>
-                      <td className="py-3.5 px-4 text-xs whitespace-nowrap">
-                        {renderStatusLabel(bk.status)}
-                      </td>
-                      <td className="py-3.5 px-5 text-right">
-                        {currentUid &&
-                        bk.requesterUid === currentUid &&
-                        bk.status !== 'cancelled' &&
-                        bk.status !== 'rejected' &&
-                        bk.status !== 'completed' ? (
-                          <button
-                            type="button"
-                            onClick={() => onCancelOwn(bk.id)}
-                            className="px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:text-rose-700 hover:border-rose-200 transition-colors cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           )}
         </div>

@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Building2,
   LogOut,
+  Play,
   Search,
   SlidersHorizontal,
 } from 'lucide-react';
@@ -16,6 +17,7 @@ import { EquipmentCard } from './components/EquipmentCard';
 import { ScheduleMatrix } from './components/ScheduleMatrix';
 import {
   buildInitialBookingsAndSlots,
+  getRelativeDateStr,
   HERO_FACILITY_IMAGE,
   INITIAL_EQUIPMENT,
 } from './data/seedCatalog';
@@ -25,6 +27,7 @@ import {
   cancelOwnBooking,
   createProjectBooking,
   facultyDecideBooking,
+  hasOverlap,
   seedCampusDatabaseIfEmpty,
   subscribeBookings,
   subscribeEquipment,
@@ -56,7 +59,6 @@ export default function App() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
-  // Initial local showcase state so campus catalog and conflicts are immediately visible
   const initialDemo = useMemo(() => buildInitialBookingsAndSlots(), []);
   const [equipment, setEquipment] = useState<Equipment[]>(INITIAL_EQUIPMENT);
   const [slotBlocks, setSlotBlocks] = useState<SlotBlock[]>(initialDemo.slotBlocks);
@@ -64,7 +66,6 @@ export default function App() {
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const [heroImgFailed, setHeroImgFailed] = useState(false);
 
-  // Workspace navigation & filtering
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('discover');
   const [roleMode, setRoleMode] = useState<UserRoleMode>('student');
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,7 +73,6 @@ export default function App() {
   const [onlyAvailable, setOnlyAvailable] = useState(false);
   const [showAiMatcher, setShowAiMatcher] = useState(true);
 
-  // Booking Modal state
   const [bookingModalOpen, setBookingModalOpen] = useState(false);
   const [bookingTargetEq, setBookingTargetEq] = useState<Equipment | null>(null);
   const [bookingPrefill, setBookingPrefill] = useState<{
@@ -81,6 +81,8 @@ export default function App() {
     title?: string;
     summary?: string;
     deadlineIso?: string;
+    courseCode?: string;
+    isDemoMode?: boolean;
   }>({});
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -88,12 +90,10 @@ export default function App() {
     user && user.emailVerified && user.email === ADMIN_EMAIL
   );
 
-  // Test Firestore connection on boot
   useEffect(() => {
     void testConnection();
   }, []);
 
-  // Auth listener & automatic user/catalog initialization
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
@@ -121,7 +121,6 @@ export default function App() {
     return () => unsubAuth();
   }, []);
 
-  // Live Firestore subscriptions for Equipment and Public SlotBlocks
   useEffect(() => {
     const unsubEq = subscribeEquipment(
       (items) => {
@@ -149,10 +148,8 @@ export default function App() {
     };
   }, [user, isAdminUser]);
 
-  // Live Firestore subscription for Bookings (admin sees all, student sees own)
   useEffect(() => {
     if (!authReady || !user) {
-      setBookings(initialDemo.bookings);
       return;
     }
 
@@ -165,7 +162,7 @@ export default function App() {
       (err) => setFirestoreError(err.message)
     );
     return () => unsubBookings();
-  }, [authReady, user, isAdminUser, initialDemo.bookings]);
+  }, [authReady, user, isAdminUser]);
 
   function showToast(msg: string) {
     setToastMsg(msg);
@@ -188,6 +185,8 @@ export default function App() {
   async function handleSignOut() {
     await signOut(auth);
     setRoleMode('student');
+    setBookings(initialDemo.bookings);
+    setSlotBlocks(initialDemo.slotBlocks);
     showToast('Signed out of LabLink.');
   }
 
@@ -199,11 +198,33 @@ export default function App() {
       title?: string;
       summary?: string;
       deadlineIso?: string;
+      courseCode?: string;
+      isDemoMode?: boolean;
     }
   ) {
     setBookingTargetEq(eq);
     setBookingPrefill(prefill || {});
     setBookingModalOpen(true);
+  }
+
+  function handleTryDemoBooking() {
+    const workstation =
+      equipment.find((e) => e.id === 'eq_l40s_workstation_02') ||
+      equipment.find((e) => e.name.toLowerCase().includes('multi-gpu')) ||
+      equipment[0];
+    if (!workstation) return;
+
+    const tomorrow = getRelativeDateStr(1);
+    openBookingModal(workstation, {
+      startIso: `${tomorrow}T10:00`,
+      endIso: `${tomorrow}T12:00`,
+      title: 'AI Image Classification',
+      summary:
+        'Training convolutional and Vision Transformer models for multi-class campus image classification.',
+      deadlineIso: `${getRelativeDateStr(4)}T17:00`,
+      courseCode: 'CS 442',
+      isDemoMode: true,
+    });
   }
 
   async function handleSubmitBooking(payload: {
@@ -215,37 +236,108 @@ export default function App() {
     deadlineIso: string;
     startIso: string;
     endIso: string;
+    allowConflictQueue?: boolean;
   }) {
-    if (!user) {
-      await handleSignIn();
+    if (user) {
+      const result = await createProjectBooking({
+        requesterUid: user.uid,
+        requesterName: profile?.displayName || user.displayName || 'Student Researcher',
+        department: payload.department,
+        equipment: payload.equipment,
+        projectTitle: payload.projectTitle,
+        projectSummary: payload.projectSummary,
+        courseOrLabCode: payload.courseOrLabCode,
+        deadlineIso: payload.deadlineIso,
+        startIso: payload.startIso,
+        endIso: payload.endIso,
+        existingSlotBlocks: slotBlocks,
+      });
+
+      if (result.status === 'conflict') {
+        showToast('Booking queued in AI Conflict Resolver.');
+        setActiveTab('conflicts');
+      } else if (result.status === 'pending') {
+        showToast('Project access request submitted — shown in My Bookings.');
+        setActiveTab('approvals');
+      } else {
+        showToast('Slot booked — shown in My Bookings.');
+        setActiveTab('approvals');
+      }
       return;
     }
-    const result = await createProjectBooking({
-      requesterUid: user.uid,
-      requesterName: profile?.displayName || user.displayName || 'Student Researcher',
+
+    // Demo Mode persistence in live session state when signed out
+    const overlaps = slotBlocks.some(
+      (s) =>
+        s.equipmentId === payload.equipment.id &&
+        hasOverlap(payload.startIso, payload.endIso, s.startIso, s.endIso)
+    );
+    const demoId = `bk_demo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const status: Booking['status'] = overlaps
+      ? 'conflict'
+      : payload.equipment.requiresFacultyApproval
+      ? 'pending'
+      : 'approved';
+
+    const newBooking: Booking = {
+      id: demoId,
+      requesterUid: 'demo_user',
+      requesterName: 'Demo Student',
       department: payload.department,
-      equipment: payload.equipment,
+      equipmentId: payload.equipment.id,
+      equipmentName: payload.equipment.name,
       projectTitle: payload.projectTitle,
       projectSummary: payload.projectSummary,
       courseOrLabCode: payload.courseOrLabCode,
       deadlineIso: payload.deadlineIso,
       startIso: payload.startIso,
       endIso: payload.endIso,
-      existingSlotBlocks: slotBlocks,
-    });
+      status,
+      requiresFacultyApproval: payload.equipment.requiresFacultyApproval,
+      ...(overlaps
+        ? { facultyNotes: 'Detected schedule overlap; queued for AI Conflict Resolver.' }
+        : {}),
+    };
 
-    if (result.status === 'conflict') {
-      showToast('Booking submitted with overlap — queued in AI Conflict Resolver.');
+    const newSlot: SlotBlock = {
+      id: demoId,
+      equipmentId: payload.equipment.id,
+      equipmentName: payload.equipment.name,
+      bookingId: demoId,
+      startIso: payload.startIso,
+      endIso: payload.endIso,
+      status: overlaps ? 'conflict' : status === 'approved' ? 'reserved' : 'pending',
+      projectLabel: `${payload.courseOrLabCode} · ${payload.projectTitle.slice(0, 32)}`,
+      isPublicSlot: true,
+      createdByUid: 'demo_user',
+    };
+
+    setBookings((prev) => [newBooking, ...prev]);
+    setSlotBlocks((prev) => [newSlot, ...prev]);
+
+    if (status === 'conflict') {
+      showToast('Conflict queued in AI Conflict Resolver.');
       setActiveTab('conflicts');
-    } else if (result.status === 'pending') {
-      showToast('Project access request submitted for faculty review.');
     } else {
-      showToast('Laboratory slot confirmed and added to campus schedule.');
+      showToast('Booking confirmed — visible in My Bookings.');
+      setActiveTab('approvals');
     }
   }
 
+  async function handleCancelBooking(bookingId: string) {
+    if (user && !bookingId.startsWith('bk_demo_')) {
+      await cancelOwnBooking(bookingId);
+    } else {
+      setBookings((prev) =>
+        prev.map((b) => (b.id === bookingId ? { ...b, status: 'cancelled' } : b))
+      );
+      setSlotBlocks((prev) => prev.filter((s) => s.bookingId !== bookingId));
+    }
+    showToast('Booking request cancelled.');
+  }
+
   async function handleApproveBooking(booking: Booking, notes: string) {
-    if (user && isAdminUser) {
+    if (user && isAdminUser && !booking.id.startsWith('bk_demo_')) {
       await facultyDecideBooking({
         booking,
         decision: 'approved',
@@ -265,7 +357,7 @@ export default function App() {
   }
 
   async function handleRejectBooking(booking: Booking, notes: string) {
-    if (user && isAdminUser) {
+    if (user && isAdminUser && !booking.id.startsWith('bk_demo_')) {
       await facultyDecideBooking({
         booking,
         decision: 'rejected',
@@ -286,7 +378,6 @@ export default function App() {
     if (user && isAdminUser) {
       await applyConflictResolutionPlan(plan.allocations, bookings);
     } else {
-      // Local preview update for non-admin explorer
       setBookings((prev) =>
         prev.map((b) => {
           const alloc = plan.allocations.find((a) => a.bookingId === b.id);
@@ -347,7 +438,6 @@ export default function App() {
     });
   }, [equipment, selectedCategory, onlyAvailable, searchQuery]);
 
-  // Dynamic KPI strip metrics
   const availableCount = equipment.filter((e) => e.status === 'available').length;
   const conflictCount = bookings.filter((b) => b.status === 'conflict').length;
   const pendingCount = bookings.filter(
@@ -418,7 +508,7 @@ export default function App() {
                   : 'hover:text-slate-900'
               }`}
             >
-              Approvals
+              My Bookings
             </button>
           </nav>
 
@@ -492,6 +582,15 @@ export default function App() {
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
                 type="button"
+                onClick={handleTryDemoBooking}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Play className="w-4 h-4" />
+                Try Demo Booking
+              </button>
+
+              <button
+                type="button"
                 onClick={() => {
                   setActiveTab('discover');
                   setShowAiMatcher(true);
@@ -501,7 +600,7 @@ export default function App() {
                       ?.scrollIntoView({ behavior: 'smooth' });
                   }, 50);
                 }}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 Match Equipment with AI
                 <ArrowRight className="w-4 h-4" />
@@ -510,7 +609,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setActiveTab('conflicts')}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 Resolve Conflicts ({conflictCount})
               </button>
@@ -583,7 +682,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* Workspace Toolbar: Tab Navigation + Role Perspective Switcher + Account Controls */}
+        {/* Workspace Toolbar */}
         <section className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-lg">
             <button
@@ -628,7 +727,7 @@ export default function App() {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              04. Approvals & Requests
+              04. My Bookings & Approvals
             </button>
           </div>
 
@@ -708,7 +807,6 @@ export default function App() {
               />
             )}
 
-            {/* Filter & Search Bar */}
             <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-lg">
                 {CATEGORIES.map((cat) => (
@@ -818,10 +916,7 @@ export default function App() {
             isAdminUser={isAdminUser}
             onApprove={handleApproveBooking}
             onReject={handleRejectBooking}
-            onCancelOwn={async (id) => {
-              await cancelOwnBooking(id);
-              showToast('Booking request cancelled.');
-            }}
+            onCancelOwn={handleCancelBooking}
           />
         )}
       </main>
@@ -836,14 +931,17 @@ export default function App() {
       <BookingModal
         isOpen={bookingModalOpen}
         equipment={bookingTargetEq}
+        allEquipment={equipment}
         initialStartIso={bookingPrefill.startIso}
         initialEndIso={bookingPrefill.endIso}
         initialTitle={bookingPrefill.title}
         initialSummary={bookingPrefill.summary}
         initialDeadlineIso={bookingPrefill.deadlineIso}
+        initialCourseCode={bookingPrefill.courseCode}
+        isDemoMode={bookingPrefill.isDemoMode}
         slotBlocks={slotBlocks}
         isSignedIn={Boolean(user)}
-        defaultDepartment={profile?.department || 'Electrical & Computer Eng.'}
+        defaultDepartment={profile?.department || 'Computer Science & AI'}
         onClose={() => setBookingModalOpen(false)}
         onSignIn={handleSignIn}
         onSubmit={handleSubmitBooking}
